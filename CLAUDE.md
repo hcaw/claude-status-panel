@@ -11,13 +11,18 @@ The mod API is early access and changes between Claude Code releases. The author
 ## Commands
 
 ```
-claude plugin validate .     # manifest, marketplace file and hooks module, as the engine reads them
-claude plugin test .         # runs every tests/*.test.ts(x); there is no per-test filter, so run one file by moving others aside or narrowing with describe/test names
+npm install                  # dev tooling only: pinned TypeScript; the mod has no runtime dependencies
+npm run typecheck            # tsc -p .
+npm test                     # claude plugin test .: runs every tests/*.test.ts(x); there is no per-test filter, so run one file by moving others aside or narrowing with describe/test names
+npm run validate             # claude plugin validate .: manifest, marketplace file and hooks module, as the engine reads them
 claude --plugin-dir .        # a session that loads this working copy and hot-reloads it on save
-tsc -p .                     # type-check (see below)
 ```
 
-`tsconfig.json` is self-contained (the options from the header of the engine's `claude-code.d.ts`) and includes `.claude-plugin/types`, which is gitignored and only exists after the engine has loaded the mod from this folder. In a fresh clone, run `claude --plugin-dir .` once so the engine lays the types; until then `tsc` reports `Cannot find module 'claude-code'`. The engine rewrites that folder on every load, so never edit it.
+## Types
+
+The `claude-code` module is not an npm package: the engine supplies it at run time, and it is the only bare import a hooks module may use. Its declarations are vendored in `types/claude-code.d.ts` (the pattern of Anthropic's built-in mods in `anthropics/claude-code/mods`), so a fresh clone type-checks with only `npm install`. `tsconfig.json` is self-contained, with the options from that file's header, and includes `types`, `hooks` and `tests`.
+
+The engine also writes its own copy to `.claude-plugin/types/` (gitignored) whenever it loads the mod from this folder. `tsconfig.json` deliberately does not include that folder, so the two copies never clash. The vendored file's first line names the Claude Code version that wrote it. After a Claude Code update, refresh it by running `claude --plugin-dir .` once, then `cp .claude-plugin/types/claude-code/index.d.ts types/claude-code.d.ts`, then `npm run typecheck`. Never edit it by hand.
 
 ## Releasing a change
 

@@ -41,11 +41,14 @@ Answer `y` to add the marketplace, then pick the user scope.
 
 ## Develop
 
+You need [Claude Code](https://code.claude.com) and Node.js. TypeScript is a dev dependency, so nothing else is installed globally.
+
 ```
-claude plugin validate .
-claude plugin test .
+npm install          # TypeScript, for type-checking only
+npm run typecheck    # tsc -p . against the vendored types in types/claude-code.d.ts
+npm test             # claude plugin test .
+npm run validate     # claude plugin validate .
 claude --plugin-dir .
-tsc -p .
 ```
 
-`tsc` needs the engine's type declarations, which it writes to `.claude-plugin/types/` (gitignored) whenever it loads the mod from this folder. In a fresh clone, run `claude --plugin-dir .` once first.
+The mod itself has no runtime dependencies: Claude Code loads `hooks/register.tsx` directly, with no build step.

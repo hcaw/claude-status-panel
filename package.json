@@ -1,0 +1,14 @@
+{
+  "name": "status-panel",
+  "private": true,
+  "type": "module",
+  "description": "Development tooling only. Claude Code loads the mod directly; it has no runtime dependencies.",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "claude plugin test .",
+    "validate": "claude plugin validate ."
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}
