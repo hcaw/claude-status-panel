@@ -1,48 +1,161 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, ModelUsage, Register } from 'claude-code'
 
-import type { Snapshot } from '../types'
+import type { Snapshot, Tokens } from '../types'
 
 const PANE = 'status-panel'
 const TITLE = 'Status'
 const REFRESH_MS = 10_000
+// The largest file `$.fs.read` returns.
+const READ_LIMIT = 4 * 1024 * 1024
+const NO_TOKENS: Tokens = { input: 0, output: 0, cached: 0, total: 0 }
 
 const snapshot = atom({ plugin: 'status-panel', key: 'snapshot' } as const, null)
 const effort = atom({ plugin: 'status-panel', key: 'effort' } as const, null)
 const shown = atom({ plugin: 'status-panel', key: 'shown' } as const, false)
-
-type Collected = Pick<Snapshot, 'branch' | 'gitExtras' | 'env' | 'plan' | 'email' | 'tokens'>
+const tokens = atom({ plugin: 'status-panel', key: 'tokens' } as const, null)
 
 async function isOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE)
 }
 
-async function collect($: EngineInterface, cwd: string): Promise<Collected> {
-  try {
-    const { exitCode, stdout } = await $.process.run(
-      ['python3', '-I', `${$.plugin.root}/bin/collect.py`],
-      { stdin: JSON.stringify({ cwd, session_id: await $.session.id() }), timeoutMs: 10_000 },
-    )
-    return exitCode === 0 ? (JSON.parse(stdout) as Collected) : {}
-  } catch {
-    return {}
+// Paths are joined with `/`, which Windows accepts as well as `\`.
+const join = (dir: string, name: string) => `${dir.replace(/[\\/]+$/, '')}/${name}`
+
+const isAbsolute = (path: string) => /^(?:[A-Za-z]:)?[\\/]/.test(path)
+
+// The folder above `dir`, keeping its trailing separator so a root stays a root
+// (`/`, `C:\`); undefined once there is nothing above.
+function parent(dir: string): string | undefined {
+  const trimmed = dir.replace(/[\\/]+$/, '')
+  const cut = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
+  if (cut < 0) return undefined
+  const up = trimmed.slice(0, cut + 1)
+  return up === dir ? undefined : up
+}
+
+// The checked-out branch, read from HEAD as git itself does, with no git process: the
+// nearest `.git` above cwd is the repository's folder, or (in a worktree or submodule)
+// a file naming it. A detached HEAD reads as its short commit.
+async function branchOf($: EngineInterface, cwd: string): Promise<string | undefined> {
+  for (let dir: string | undefined = cwd; dir; dir = parent(dir)) {
+    const dotGit = join(dir, '.git')
+    const found = await $.fs.stat(dotGit).catch(() => undefined)
+    if (!found) continue
+    let gitDir = dotGit
+    if (found.kind === 'file') {
+      const named = /^gitdir:\s*(.+?)\s*$/m.exec(await $.fs.read(dotGit))?.[1]
+      if (!named) return undefined
+      gitDir = isAbsolute(named) ? named : join(dir, named)
+    }
+    const head = (await $.fs.read(join(gitDir, 'HEAD'))).trim()
+    const ref = /^ref:\s*(?:refs\/heads\/)?(.+)$/.exec(head)?.[1]
+    return ref ?? head.slice(0, 7)
   }
+  return undefined
+}
+
+// Where Claude Code keeps its files: CLAUDE_CONFIG_DIR when set, else the home folder
+// (USERPROFILE on Windows, HOME elsewhere), with `.claude.json` beside `.claude`.
+async function claudeFiles($: EngineInterface): Promise<{ account: string; projects: string } | undefined> {
+  const configDir = await $.env.get('CLAUDE_CONFIG_DIR')
+  if (configDir) return { account: join(configDir, '.claude.json'), projects: join(configDir, 'projects') }
+  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
+  return home ? { account: join(home, '.claude.json'), projects: join(home, '.claude/projects') } : undefined
+}
+
+// The signed-in account's plan and email, from Claude Code's own `.claude.json`.
+async function accountOf($: EngineInterface): Promise<Pick<Snapshot, 'plan' | 'email'>> {
+  const files = await claudeFiles($)
+  if (!files) return {}
+  const config = JSON.parse(await $.fs.read(files.account)) as {
+    oauthAccount?: { organizationType?: string; emailAddress?: string }
+  }
+  const account = config.oauthAccount ?? {}
+  // `claude_max` reads as "Claude Max".
+  const org = (account.organizationType ?? '')
+    .replace(/claude_/g, '')
+    .replace(/_/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, first => first.toUpperCase())
+  return { plan: org ? `Claude ${org}` : 'Claude', email: account.emailAddress || undefined }
+}
+
+const addUsage = (sum: Tokens, usage: ModelUsage): Tokens => {
+  const input = sum.input + usage.input_tokens
+  const output = sum.output + usage.output_tokens
+  const cached = sum.cached + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
+  return { input, output, cached, total: input + output + cached }
+}
+
+// The session's token totals so far, summed from its transcript with each response
+// counted once: for a resumed session, whose earlier turns this process never saw.
+// Undefined when the transcript is not found or is larger than `$.fs.read` returns.
+async function transcriptTokens($: EngineInterface): Promise<Tokens | undefined> {
+  const files = await claudeFiles($)
+  if (!files) return undefined
+  const name = `${await $.session.id()}.jsonl`
+  // A project's folder is its path with every other character a dash; a very long
+  // path is shortened, so look through every folder when that misses.
+  const guess = join(join(files.projects, (await $.session.root()).replace(/[^A-Za-z0-9]/g, '-')), name)
+  let path = (await $.fs.exists(guess)) ? guess : undefined
+  if (!path) {
+    const folders = (await $.fs.list(files.projects)).filter(entry => entry.kind === 'dir')
+    const found = await Promise.all(
+      folders.map(async folder => {
+        const candidate = join(join(files.projects, folder.name), name)
+        return (await $.fs.exists(candidate)) ? candidate : undefined
+      }),
+    )
+    path = found.find(one => one !== undefined)
+  }
+  if (!path || (await $.fs.stat(path)).size > READ_LIMIT) return undefined
+
+  type Row = { message?: { id?: string; usage?: Partial<Record<keyof ModelUsage, number | null>> } }
+  const seen = new Set<string>()
+  let sum = NO_TOKENS
+  for (const line of (await $.fs.read(path)).split('\n')) {
+    if (!line.includes('"usage"')) continue
+    let row: Row
+    try {
+      row = JSON.parse(line) as Row
+    } catch {
+      continue
+    }
+    const usage = row.message?.usage
+    if (!usage) continue
+    const id = row.message?.id
+    if (id) {
+      if (seen.has(id)) continue
+      seen.add(id)
+    }
+    sum = addUsage(sum, {
+      input_tokens: usage.input_tokens ?? 0,
+      output_tokens: usage.output_tokens ?? 0,
+      cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+      cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+    })
+  }
+  return sum
 }
 
 async function refresh($: EngineInterface): Promise<void> {
   const cwd = await $.session.cwd()
-  const [usage, version, model, collected] = await Promise.all([
+  const [usage, version, model, branch, account] = await Promise.all([
     $.session.usage(),
     $.session.version(),
     $.session.model(),
-    collect($, cwd),
+    branchOf($, cwd).catch(() => undefined),
+    accountOf($).catch(() => ({})),
   ])
   const limit = (kind: string) => {
     const found = usage.rateLimits.find(one => one.kind === kind)
     return found && { percent: found.percentUsed, resetsAt: found.resetsAt }
   }
   const next: Snapshot = {
-    ...collected,
+    ...account,
+    branch,
     updatedAt: await $.clock.now(),
     cwd,
     version: version.version,
@@ -91,7 +204,8 @@ const duration = (ms: number) => {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-const home = (path: string) => path.replace(/^\/Users\/[^/]+/, '~')
+// The home folder as `~`: /Users/<name> (macOS), /home/<name> (Linux), C:\Users\<name> (Windows).
+const home = (path: string) => path.replace(/^(?:\/(?:Users|home)\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)(?=$|[/\\])/, '~')
 
 const levelColour = (percent?: number) =>
   percent === undefined ? 'inactive' : percent >= 90 ? 'error' : percent >= 70 ? 'warning' : 'success'
@@ -108,7 +222,22 @@ export const register: Register = on => {
         .then(open => (open ? refresh($) : undefined))
         .catch(() => undefined)
     })
+    // Token totals live in `$.state`, which a hot reload keeps; a session resumed in
+    // a new process starts without them, so they begin from its transcript.
+    if ((await read($, tokens)) === null) {
+      const fresh = (await $.session.turns()) === 0
+      void (fresh ? Promise.resolve(NO_TOKENS) : transcriptTokens($))
+        .catch(() => undefined)
+        .then(found => update($, tokens, now => now ?? found ?? NO_TOKENS))
+        .catch(() => undefined)
+    }
     return started
+  })
+
+  // A /clear starts the conversation, and its token totals, over.
+  on('session.end', async ($, e, next) => {
+    if (e.reason === 'clear') await update($, tokens, () => NO_TOKENS)
+    return next(e)
   })
 
   on('command.run', { command: 'status-panel' }, async $ => {
@@ -148,7 +277,11 @@ export const register: Register = on => {
       const level = String(e.effort)
       await update($, effort, () => level)
     }
-    return yield* next(e)
+    const result = yield* next(e)
+    // Each main-loop response's usage, the same figures its transcript row records.
+    const usage = result.usage
+    if (usage && e.agentId === undefined) await update($, tokens, now => addUsage(now ?? NO_TOKENS, usage))
+    return result
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -161,6 +294,7 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const snap = await read($, snapshot)
     const live = await read($, effort)
+    const used = await read($, tokens)
 
     if (!snap) return <Text dimColor>Gathering status…</Text>
 
@@ -196,13 +330,7 @@ export const register: Register = on => {
         {section(
           'Workspace',
           row('Directory', <Text color="ide" wrap="truncate-start">{home(snap.cwd)}</Text>),
-          row(
-            'Branch',
-            <Text wrap="truncate">
-              <Text bold color="merged">{snap.branch ?? 'no git'}</Text>
-              {snap.gitExtras ? <Text color="success">{` ${snap.gitExtras}`}</Text> : null}
-            </Text>,
-          ),
+          row('Branch', <Text bold color="merged" wrap="truncate">{snap.branch ?? 'no git'}</Text>),
         )}
         {section(
           'Session',
@@ -229,10 +357,10 @@ export const register: Register = on => {
         )}
         {section(
           'Tokens',
-          row('Input', <Text>{compact(snap.tokens?.input)}</Text>),
-          row('Output', <Text>{compact(snap.tokens?.output)}</Text>),
-          row('Cached', <Text>{compact(snap.tokens?.cached)}</Text>),
-          row('Total', <Text bold>{compact(snap.tokens?.total)}</Text>),
+          row('Input', <Text>{compact(used?.input)}</Text>),
+          row('Output', <Text>{compact(used?.output)}</Text>),
+          row('Cached', <Text>{compact(used?.cached)}</Text>),
+          row('Total', <Text bold>{compact(used?.total)}</Text>),
         )}
         {section(
           'Limits',
@@ -247,7 +375,6 @@ export const register: Register = on => {
             </Text>,
           ),
         )}
-        {section('Env', row('Runtime', <Text wrap="truncate">{snap.env ?? '–'}</Text>))}
         <Text dimColor>/status-panel to hide · refreshes every 10s</Text>
       </Box>
     )

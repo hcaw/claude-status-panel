@@ -4,15 +4,14 @@ A Claude Code mod that shows session, workspace, account and usage details in a 
 
 The pane has these sections:
 
-- **Workspace:** directory, git branch, line counts and status flags (`+` staged, `*` unstaged, `?` untracked, `!` conflict)
+- **Workspace:** directory and git branch
 - **Session:** Claude Code version, model, effort, time running, cost
 - **Account:** plan and email
 - **Context:** context window used, as a percentage and in tokens
 - **Tokens:** input, output, cached and total for the session
 - **Limits:** 5-hour and 7-day usage, and progress through the 5-hour block
-- **Env:** Node and Python versions (with any virtual env) for the kind of project in the directory
 
-It refreshes every 10 seconds and after each turn while open, and does no work while closed.
+It refreshes every 10 seconds and after each turn while open, and does no work while closed. Everything comes from Claude Code itself, so it runs no other programs and works the same on macOS, Linux and Windows.
 
 ## Install
 

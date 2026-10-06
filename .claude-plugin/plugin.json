@@ -1,7 +1,7 @@
 {
   "name": "status-panel",
-  "version": "0.1.0",
-  "description": "Session, workspace, account, context, token, limit and runtime details in a side pane toggled with /status-panel",
+  "version": "0.2.0",
+  "description": "Claude session status in a side pane toggled with /status-panel",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Harry Wright"
