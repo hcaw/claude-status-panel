@@ -1,0 +1,13 @@
+{
+  "name": "hcaw-status-panel",
+  "owner": {
+    "name": "Harry Wright"
+  },
+  "plugins": [
+    {
+      "name": "status-panel",
+      "source": "./",
+      "description": "Session, workspace, account, context, token, limit and runtime details in a side pane toggled with /status-panel"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "status-panel",
+  "version": "0.1.0",
+  "description": "Session, workspace, account, context, token, limit and runtime details in a side pane toggled with /status-panel",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Harry Wright"
+  },
+  "repository": "https://github.com/hcaw/claude-status-panel"
+}
