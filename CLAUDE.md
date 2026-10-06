@@ -30,7 +30,7 @@ The installed plugin runs a cached copy from GitHub, not this folder. After edit
 
 ## Architecture
 
-All behaviour lives in `hooks/register.tsx` (named by `hooks/hooks.json`). The module runs in a sandbox with no Node and no DOM: everything external goes through `$`, and JSX compiles against the global `h` with elements taken from `$.ui.resolve(e)`.
+All behaviour lives in `hooks/register.tsx` (named by `hooks/hooks.json`), with the text charts (a thin meter with an optional tick, a one-hue sparkline) as pure functions in `hooks/charts.ts`, which return runs of glyphs and theme colours that the pane draws as nested `Text`. The module runs in a sandbox with no Node and no DOM: everything external goes through `$`, and JSX compiles against the global `h` with elements taken from `$.ui.resolve(e)`.
 
 - **Data flow:** a gather step (`refresh`) writes a `Snapshot` into `$.state`; render hooks only read state. Render hooks must never write state (the engine denies it), and module-level variables are lost on every hot reload, so anything a drawing reads goes in `$.state`.
 - **State contract:** every `$.state` key is declared in `types/index.d.ts` under `PluginState['status-panel']`, and `plugin.json` names that file under `"types"`. `claude plugin validate` checks the module against it, so add a key there before using it.
@@ -38,16 +38,18 @@ All behaviour lives in `hooks/register.tsx` (named by `hooks/hooks.json`). The m
   - `$.session.usage()` (context window, rate limits, cost, `startedAt`), `$.session.version()`, `$.session.model()`, and effort captured from `turn.step` (falling back to `effortLevel` / `modelSettings` in settings).
   - Branch: `branchOf` walks up from cwd with `$.fs` to the nearest `.git` (a folder, or a `gitdir:` file in a worktree or submodule) and reads `HEAD`; a detached HEAD shows its short commit. There is no engine API for a working-tree diff, so there are no line counts or status flags.
   - Plan and email: `oauthAccount` in Claude Code's `.claude.json`, under `CLAUDE_CONFIG_DIR` or the home folder (`USERPROFILE`, then `HOME`).
-  - Token totals: the `tokens` key, summed from each main-loop `turn.step` result's `usage` and reset by `session.end` with reason `clear`. `$.state` survives a hot reload but not a resume in a new process, so `session.start` seeds it once from the transcript `<projects>/*/<session_id>.jsonl`, skipped above `$.fs.read`'s 4 MiB limit.
+  - Token totals and history: the `tokens` and `history` keys, from each main-loop `turn.step` result's `usage` (history keeps each response's context size and output, capped at 240, for the sparklines) and reset by `session.end` with reason `clear`. `$.state` survives a hot reload but not a resume in a new process, so `session.start` seeds them once from the transcript `<projects>/*/<session_id>.jsonl`, skipped above `$.fs.read`'s 4 MiB limit. A field added to a stored shape is read as optional, since a hot reload keeps the old value.
   - Paths are joined with `/`; the engine hands hooks (and tests' stubs) the platform's own separators.
 - **Refresh:** a `$.clock.every` timer (10 s) started in `session.start`, plus `turn.complete`, both skipped while the pane is closed. Every refresh call is wrapped in `.catch` so a failure never breaks a command or a turn.
 - **Toggling:** one `toggle()` is shared by three entry points: the `/status-panel` command (`command.run`), the footer button, and an optional keybinding such as `"ctrl+x s": "command:status-panel"` that a user adds to `~/.claude/keybindings.json` (see the README). A `ui.close` hook keeps the `shown` flag in sync however the pane is closed (its close mark, `ctrl+x x`).
 - **Footer button:** mods cannot draw into the status line itself. The button is drawn by hooking the `SessionMode` render site (the footer row beside the status line) and redrawing the engine's own content there, the mode labels dim and joined by `&`, followed by the button. Keep that content intact when changing this hook.
 - **Panes opened unasked** only seat on wide terminals (144+ columns), so the pane is only ever opened in response to the user (command, button, keybinding), never from `session.start`.
 
+- **Charts:** every glyph is one cell wide and every chart is sized from `bodyColumns`, so nothing wraps; colours are theme keys, never raw RGB, so light and dark themes both work. `Raster` (terminal only) and `Svg` (no terminal) are deliberately unused, so one drawing serves every surface. Colour carries meaning only: status keys on context and limit meters (a limit by its projected outlook), one hue per sparkline, and headers and figures in plain ink. The directory and branch keep their own colours (`ide`, `merged`) as identity, as Claude Code's own status line draws them.
+
 ## Tests
 
-Tests use `claude-code/testing`. Nothing beneath the plugin answers engine events in a test, so each test stubs what the plugin calls (`ui.open` returning `{ value: { isPlaced: true } }`, `ui.panes`, `ui.close`). Calls that are not stubbed fail, which is why `refresh` is caught. UI tests mount a component and loop over `['terminal', 'desktop']` so the drawing is checked on more than one surface.
+Tests use `claude-code/testing`. Nothing beneath the plugin answers engine events in a test, so each test stubs what the plugin calls (`ui.open` returning `{ value: { isPlaced: true } }`, `ui.panes`, `ui.close`). Calls that are not stubbed fail, which is why `refresh` is caught. UI tests mount a component and loop over `['terminal', 'desktop']` so the drawing is checked on more than one surface. `tests/panel.test.tsx` flattens a drawn pane into the lines a terminal would show and checks every chart fits at 28, 40 and 60 columns.
 
 ## Conventions
 

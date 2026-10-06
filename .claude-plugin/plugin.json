@@ -1,6 +1,6 @@
 {
   "name": "status-panel",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Claude session status in a side pane toggled with /status-panel",
   "types": "./types/index.d.ts",
   "author": {

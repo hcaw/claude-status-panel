@@ -24,9 +24,11 @@ const CWD = `${HOME}\\project`
 // joined it with.
 const isPath = (path: string, expected: string) => path.replace(/\\/g, '/') === expected.replace(/\\/g, '/')
 
+const IDLE_USAGE = { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 0 } }
+
 // A Windows session in a git repository, signed in to a Max plan: everything the
 // panel gathers comes through `$`, with no process run. `files` adds files by path.
-function stubEngine(on: On, files: Record<string, string> = {}) {
+function stubEngine(on: On, files: Record<string, string> = {}, usage: object = IDLE_USAGE) {
   const file = (path: string) => Object.entries(files).find(([name]) => isPath(path, name))?.[1]
   let isUp = false
   on('ui.open', () => {
@@ -39,9 +41,7 @@ function stubEngine(on: On, files: Record<string, string> = {}) {
   on('session.cwd', () => ({ value: CWD }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.version', () => ({ value: { version: '2.1.291', base: '2.1.291' } }))
-  on('session.usage', () => ({
-    value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 0 } },
-  }))
+  on('session.usage', () => ({ value: usage as typeof IDLE_USAGE }))
   on('clock.now', () => ({ value: 60_000 }))
   on('settings.read', () => ({ value: {} }))
   on('env.get', ($, e) => ({ value: e.name === 'USERPROFILE' ? HOME : undefined }))
@@ -161,4 +161,85 @@ test('a resumed session starts its token totals from the transcript', async ($, 
   expect(await ui.find({ type: 'Text', text: /^2\.0k$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^2\.1k$/ })).toBeDefined()
   await ui.unmount()
+})
+
+type Drawn = { type: string; props?: Record<string, unknown>; children?: unknown[] }
+
+// The drawing as the lines a terminal would show, near enough to measure: a column
+// Box stacks its children, a row Box sets them side by side, a Box's `width` pads it.
+function lines(node: unknown): string[] {
+  if (node === null || node === undefined || node === false) return []
+  if (typeof node === 'string' || typeof node === 'number') return [String(node)]
+  if (Array.isArray(node)) return node.flatMap(lines)
+  const el = node as Drawn
+  const kids = el.children ?? []
+  if (el.type === 'Text') return [kids.flatMap(lines).join('')]
+  if (el.type !== 'Box') return []
+  let out: string[]
+  if (el.props?.flexDirection === 'row') {
+    const parts = kids.map(kid => {
+      const width = (kid as Drawn)?.props?.width
+      const drawn = lines(kid)
+      return typeof width === 'number' ? (drawn.length ? drawn : ['']).map(line => line.padEnd(width)) : drawn
+    })
+    const height = Math.max(0, ...parts.map(part => part.length))
+    out = Array.from({ length: height }, (_, i) => parts.map(part => part[i] ?? '').join(''))
+  } else out = kids.flatMap(lines)
+  const below = el.props?.marginBottom
+  return typeof below === 'number' ? [...out, ...Array<string>(below).fill('')] : out
+}
+
+test('every chart fits the pane, from narrow to wide', async ($, on) => {
+  const MINUTE = 60_000
+  stubEngine(on, {}, {
+    startedAt: 0,
+    context: { tokens: 412_000, window: 1_000_000, percent: 41 },
+    rateLimits: [
+      // Two hours left of five: 60% of the window gone, 72% used, so ahead of the clock.
+      { kind: 'five_hour', percentUsed: 72, resetsAt: new Date(60_000 + 120 * MINUTE).toISOString() },
+      { kind: 'seven_day', percentUsed: 18.5, resetsAt: new Date(60_000 + 4 * 24 * 60 * MINUTE).toISOString() },
+    ],
+    cost: { usd: 4.2 },
+  })
+  on('turn.step', async function* ($, e) {
+    return {
+      turnId: e.turnId,
+      index: e.index,
+      answer: '',
+      toolUses: [],
+      stopReason: 'end_turn',
+      usage: {
+        model: 'claude-opus-5-5',
+        input_tokens: 40 + e.index * 3,
+        output_tokens: [120, 900, 300, 2_400, 60, 700][e.index % 6]!,
+        cache_read_input_tokens: 20_000 + e.index * 9_000,
+        cache_creation_input_tokens: 1_500,
+      },
+    }
+  })
+  for (let index = 0; index < 40; index++) {
+    for await (const _ of $.turn.step({ turnId: 't1', index, model: 'claude-opus-5-5', messageCount: 1 })) {
+      // The bottom hook answers with no pieces.
+    }
+  }
+  await $.command.run(RUN)
+
+  for (const bodyColumns of [28, 40, 60]) {
+    const ui = await $.ui.mount({
+      plugin: 'status-panel',
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: 'status-panel',
+      props: { ...PANE_PROPS, bodyColumns },
+    })
+    const drawn = lines(await ui.drawn())
+    // Nothing runs past the edge, charts and packed lines alike; only a long path, branch,
+    // model or email truncates, by design.
+    for (const line of drawn.filter(one => !/^(Directory|Branch|Model|Email) /.test(one))) {
+      expect(line.length).toBeLessThanOrEqual(bodyColumns)
+    }
+    expect(await ui.find({ type: 'Text', text: /^72%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /out in/ })).toBeDefined()
+    await ui.unmount()
+  }
 })

@@ -7,9 +7,11 @@ The pane has these sections:
 - **Workspace:** directory and git branch
 - **Session:** Claude Code version, model, effort, time running, cost
 - **Account:** plan and email
-- **Context:** context window used, as a percentage and in tokens
-- **Tokens:** input, output, cached and total for the session
-- **Limits:** 5-hour and 7-day usage, and progress through the 5-hour block
+- **Context:** a meter of the context window used, tokens used and free, and a sparkline of how it filled, reply by reply
+- **Tokens:** the session's input, output, cached and total tokens, a meter of how much input came from the cache, and a sparkline of tokens written per reply
+- **Limits:** a meter for the 5-hour and 7-day windows with a tick where the time elapsed stands, so usage running ahead of the clock shows at a glance. Each is coloured by its outlook, with when it resets and a projection: on pace for a figure, or when it runs out first
+
+The charts are thin lines and block characters in your theme's colours, so they need no fonts or images and fit the pane at any width.
 
 It refreshes every 10 seconds and after each turn while open, and does no work while closed. Everything comes from Claude Code itself, so it runs no other programs and works the same on macOS, Linux and Windows.
 
