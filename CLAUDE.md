@@ -17,7 +17,7 @@ claude --plugin-dir .        # a session that loads this working copy and hot-re
 tsc -p .                     # type-check (see below)
 ```
 
-`tsconfig.json` extends `.claude-plugin/types/tsconfig.json`, which is gitignored and only exists after the engine has loaded the mod from this folder (`claude --plugin-dir .` once). Until then, type-check with a tsconfig kept outside the repo using the options in the header of the skill's `claude-code.d.ts`, its `include` naming that file plus `hooks`, `types` and `tests`.
+`tsconfig.json` is self-contained (the options from the header of the engine's `claude-code.d.ts`) and includes `.claude-plugin/types`, which is gitignored and only exists after the engine has loaded the mod from this folder. In a fresh clone, run `claude --plugin-dir .` once so the engine lays the types; until then `tsc` reports `Cannot find module 'claude-code'`. The engine rewrites that folder on every load, so never edit it.
 
 ## Releasing a change
 

@@ -45,4 +45,7 @@ Answer `y` to add the marketplace, then pick the user scope.
 claude plugin validate .
 claude plugin test .
 claude --plugin-dir .
+tsc -p .
 ```
+
+`tsc` needs the engine's type declarations, which it writes to `.claude-plugin/types/` (gitignored) whenever it loads the mod from this folder. In a fresh clone, run `claude --plugin-dir .` once first.
