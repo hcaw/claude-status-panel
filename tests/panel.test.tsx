@@ -17,16 +17,18 @@ const PANE_PROPS = {
   view: {},
 } as const
 
-const HOME = 'C:\\Users\\test'
-const CWD = `${HOME}\\project`
+const HOME = '/home/test'
+const CWD = `${HOME}/project`
 
-// The engine hands hooks a path in the platform's own separators, whichever the mod
-// joined it with.
-const isPath = (path: string, expected: string) => path.replace(/\\/g, '/') === expected.replace(/\\/g, '/')
+// The engine hands hooks (and these stubs) a path in the platform's own form: its own
+// separators, and on Windows a drive in front of a rooted path. So compare the tail, with
+// the separators made alike.
+const slashed = (path: string) => path.replace(/\\/g, '/')
+const isPath = (path: string, expected: string) => slashed(path).endsWith(slashed(expected))
 
 const IDLE_USAGE = { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 0 } }
 
-// A Windows session in a git repository, signed in to a Max plan: everything the
+// A session in a git repository, signed in to a Max plan: everything the
 // panel gathers comes through `$`, with no process run. `files` adds files by path.
 function stubEngine(on: On, files: Record<string, string> = {}, usage: object = IDLE_USAGE) {
   const file = (path: string) => Object.entries(files).find(([name]) => isPath(path, name))?.[1]
@@ -56,7 +58,7 @@ function stubEngine(on: On, files: Record<string, string> = {}, usage: object = 
   on('fs.read', ($, e) => {
     const text = file(e.path)
     if (text !== undefined) return { value: text }
-    if (isPath(e.path, `${CWD}/.git/HEAD`)) return { value: 'ref: refs/heads/feature/windows\n' }
+    if (isPath(e.path, `${CWD}/.git/HEAD`)) return { value: 'ref: refs/heads/feature/panel\n' }
     if (isPath(e.path, `${HOME}/.claude.json`)) {
       return {
         value: JSON.stringify({ oauthAccount: { organizationType: 'claude_max', emailAddress: 'someone@example.com' } }),
@@ -78,8 +80,8 @@ test('the pane reads branch and account through $, with no process', async ($, o
       requestId: 'status-panel',
       props: PANE_PROPS,
     })
-    expect(await ui.find({ type: 'Text', text: /^~\\project$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^feature\/windows$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^~\/project$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^feature\/panel$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Claude Max$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^someone@example\.com$/ })).toBeDefined()
     await ui.unmount()
@@ -131,7 +133,7 @@ test('token totals add up the main loop responses, not a subagent', async ($, on
 })
 
 test('a resumed session starts its token totals from the transcript', async ($, on) => {
-  const transcript = `${HOME}/.claude/projects/C--Users-test-project/session-1.jsonl`
+  const transcript = `${HOME}/.claude/projects/${CWD.replace(/[^A-Za-z0-9]/g, '-')}/session-1.jsonl`
   const row = (id: string, input: number, output: number) =>
     JSON.stringify({ message: { id, usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 1_000 } } })
   // One response written as two rows (one per content block) counts once.

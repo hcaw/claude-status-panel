@@ -1,0 +1,4 @@
+# One line ending everywhere, so a Windows checkout and a Linux or macOS one are the same bytes.
+* text=auto eol=lf
+*.png binary
+*.svg text

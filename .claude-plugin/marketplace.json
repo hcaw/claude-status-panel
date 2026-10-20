@@ -1,5 +1,6 @@
 {
   "name": "hcaw-status-panel",
+  "description": "Claude Code mods by Harry Wright, starting with status-panel: a toggleable side pane of session, account and usage details",
   "owner": {
     "name": "Harry Wright"
   },

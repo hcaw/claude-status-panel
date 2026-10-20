@@ -2,7 +2,11 @@
   "name": "status-panel",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "description": "Development tooling only. Claude Code loads the mod directly; it has no runtime dependencies.",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "claude plugin test .",
