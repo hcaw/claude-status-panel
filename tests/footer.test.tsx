@@ -37,3 +37,27 @@ test('outside fullscreen the footer keeps the modes and draws no toggle', async 
   expect(await ui.find({ type: 'Text', text: /auto mode on/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', key: 'status-panel-toggle' })).toBeUndefined()
 })
+
+test('a reload with the pane open keeps the footer toggle filled', async ($, on) => {
+  on('ui.panes', () => ({
+    value: [{ id: 'status-panel', title: 'Status', isShown: true, isFocused: false, isPlaced: true }],
+  }))
+  on('command.register', () => ({ value: { command: 'status-panel' } }))
+  on('clock.every', () => ({ value: undefined }))
+  on('session.turns', () => ({ value: 0 }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+
+  // A hot reload runs `session.start` again while the pane stays open.
+  await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount({
+    plugin: 'status-panel',
+    surface: 'terminal',
+    component: 'SessionMode',
+    props: { modes: [] },
+    viewport: { columns: 200, rows: 50, isFullscreen: true },
+  })
+  const button = (await ui.find({ type: 'Button', key: 'status-panel-toggle' })) as { props?: { label?: string } }
+  expect(button?.props?.label).toBe('■ status')
+  await ui.unmount()
+})

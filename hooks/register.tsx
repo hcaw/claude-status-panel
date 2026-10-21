@@ -297,8 +297,10 @@ const levelColour = (percent?: number) =>
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    // No pane is open in a new session, whatever a kept state says.
-    await update($, shown, () => false)
+    // A hot reload runs this again with the pane still open, so take the flag from the
+    // panes themselves: none is open in a new session, whatever a kept state says.
+    const isUp = await isOpen($).catch(() => false)
+    await update($, shown, () => isUp)
     await $.command.register({
       name: 'status-panel',
       description: 'Toggle a pane showing everything from the status line',
