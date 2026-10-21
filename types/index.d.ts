@@ -5,6 +5,9 @@ export type Snapshot = {
   version?: string
   // This plugin's version, from its plugin.json.
   pluginVersion?: string
+  // That version's release date (YYYY-MM-DD) and one-line summary, from its CHANGELOG.md.
+  released?: string
+  releaseNote?: string
   model?: string
   startedAt?: number
   plan?: string

@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, ModelUsage, Register } from 'claude-code'
 
 import type { History, Snapshot, Tokens } from '../types'
+import { dayOf, releaseOf } from './changelog'
 import { meter, spark, width as cellsOf, type Run } from './charts'
 
 const PANE = 'status-panel'
@@ -132,14 +133,16 @@ async function accountOf($: EngineInterface): Promise<Pick<Snapshot, 'plan' | 'e
   return { plan: org ? `Claude ${org}` : 'Claude', email: account.emailAddress || undefined }
 }
 
-// When this version was released. The manifest has no field for it (the validator warns on
-// unknown keys), so it lives here: set it alongside `version` in plugin.json on each release.
-const RELEASED = '21 Oct 2026'
-
-// This plugin's own version, from the manifest it was loaded from.
-async function pluginVersionOf($: EngineInterface): Promise<string | undefined> {
+// This plugin's own version, from the manifest it was loaded from, and when that version was
+// released and what it changed, from the CHANGELOG.md beside it. A version with no dated entry
+// (a working copy between releases) has neither.
+async function aboutOf($: EngineInterface): Promise<Pick<Snapshot, 'pluginVersion' | 'released' | 'releaseNote'>> {
   const manifest = JSON.parse(await $.fs.read(join($.plugin.root, '.claude-plugin/plugin.json'))) as { version?: string }
-  return manifest.version || undefined
+  const pluginVersion = manifest.version || undefined
+  if (!pluginVersion) return {}
+  const changelog = await $.fs.read(join($.plugin.root, 'CHANGELOG.md')).catch(() => '')
+  const release = releaseOf(changelog, pluginVersion)
+  return { pluginVersion, released: release?.date, releaseNote: release?.summary }
 }
 
 const addUsage = (sum: Tokens, usage: ModelUsage): Tokens => {
@@ -217,13 +220,13 @@ async function transcriptUsage($: EngineInterface): Promise<{ tokens: Tokens; hi
 
 async function refresh($: EngineInterface): Promise<void> {
   const cwd = await $.session.cwd()
-  const [usage, version, model, branch, account, pluginVersion] = await Promise.all([
+  const [usage, version, model, branch, account, about] = await Promise.all([
     $.session.usage(),
     $.session.version(),
     $.session.model(),
     branchOf($, cwd).catch(() => undefined),
     accountOf($).catch(() => ({})),
-    pluginVersionOf($).catch(() => undefined),
+    aboutOf($).catch(() => ({})),
   ])
   const limit = (kind: string) => {
     const found = usage.rateLimits.find(one => one.kind === kind)
@@ -231,11 +234,11 @@ async function refresh($: EngineInterface): Promise<void> {
   }
   const next: Snapshot = {
     ...account,
+    ...about,
     branch,
     updatedAt: await $.clock.now(),
     cwd,
     version: version.version,
-    pluginVersion,
     model,
     startedAt: usage.startedAt,
     context: usage.context,
@@ -662,7 +665,8 @@ export const register: Register = on => {
           {section(
             'About',
             row('Version', <Text bold>{snap.pluginVersion ?? '–'}</Text>),
-            row('Released', <Text>{RELEASED}</Text>),
+            row('Released', <Text>{(snap.released && dayOf(snap.released)) ?? '–'}</Text>),
+            ...(snap.releaseNote ? [row('', <Text dimColor wrap="wrap">{snap.releaseNote}</Text>)] : []),
           )}
         </Box>
       )

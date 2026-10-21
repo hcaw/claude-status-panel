@@ -88,8 +88,30 @@ test('the pane reads branch and account through $, with no process', async ($, o
   }
 })
 
-test('the Settings tab shows the plugin version from its manifest', async ($, on) => {
-  stubEngine(on, { '.claude-plugin/plugin.json': JSON.stringify({ name: 'status-panel', version: '9.8.7' }) })
+const CHANGELOG = `# Changelog
+
+## [Unreleased]
+
+Not out yet.
+
+## [9.8.7] - 2026-03-04
+
+Sharper charts.
+
+### Fixed
+
+- Something.
+
+## [9.8.6] - 2026-02-01
+
+Older.
+`
+
+test('the Settings tab shows the plugin version, and its date and summary from the changelog', async ($, on) => {
+  stubEngine(on, {
+    '.claude-plugin/plugin.json': JSON.stringify({ name: 'status-panel', version: '9.8.7' }),
+    'CHANGELOG.md': CHANGELOG,
+  })
   await $.command.run(RUN)
 
   for (const surface of ['terminal', 'desktop'] as const) {
@@ -102,8 +124,34 @@ test('the Settings tab shows the plugin version from its manifest', async ($, on
     })
     await ui.press({ key: 'tab-settings' })
     expect(await ui.find({ type: 'Text', text: /^9\.8\.7$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^\d{1,2} [A-Z][a-z]{2} \d{4}$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^4 Mar 2026$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Sharper charts\.$/ })).toBeDefined()
     // The tab is kept in state, so go back before the next surface.
+    await ui.press({ key: 'tab-overview' })
+    await ui.unmount()
+  }
+})
+
+test('the Settings tab shows a dash for a version with no dated changelog entry', async ($, on) => {
+  // 9.9.0 is a working copy between releases: plugin.json is bumped, the changelog is not.
+  stubEngine(on, {
+    '.claude-plugin/plugin.json': JSON.stringify({ name: 'status-panel', version: '9.9.0' }),
+    'CHANGELOG.md': CHANGELOG,
+  })
+  await $.command.run(RUN)
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({
+      plugin: 'status-panel',
+      surface,
+      component: 'Pane',
+      requestId: 'status-panel',
+      props: PANE_PROPS,
+    })
+    await ui.press({ key: 'tab-settings' })
+    expect(await ui.find({ type: 'Text', text: /^9\.9\.0$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^–$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Sharper charts/ })).toBeUndefined()
     await ui.press({ key: 'tab-overview' })
     await ui.unmount()
   }
