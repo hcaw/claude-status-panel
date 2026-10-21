@@ -102,6 +102,7 @@ test('the Settings tab shows the plugin version from its manifest', async ($, on
     })
     await ui.press({ key: 'tab-settings' })
     expect(await ui.find({ type: 'Text', text: /^9\.8\.7$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\d{1,2} [A-Z][a-z]{2} \d{4}$/ })).toBeDefined()
     // The tab is kept in state, so go back before the next surface.
     await ui.press({ key: 'tab-overview' })
     await ui.unmount()

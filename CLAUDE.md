@@ -26,7 +26,7 @@ The engine also writes its own copy to `.claude-plugin/types/` (gitignored) when
 
 ## Releasing a change
 
-The installed plugin runs a cached copy from GitHub, not this folder. After editing: bump `version` in `.claude-plugin/plugin.json`, commit, push, then `claude plugin update status-panel@hcaw-status-panel` and `/reload-plugins` in a session.
+The installed plugin runs a cached copy from GitHub, not this folder. After editing: bump `version` in `.claude-plugin/plugin.json` and set `RELEASED` in `hooks/register.tsx` to the day's date (shown on the Settings tab), commit, push, then `claude plugin update status-panel@hcaw-status-panel` and `/reload-plugins` in a session.
 
 ## Architecture
 

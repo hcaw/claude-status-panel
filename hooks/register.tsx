@@ -132,6 +132,10 @@ async function accountOf($: EngineInterface): Promise<Pick<Snapshot, 'plan' | 'e
   return { plan: org ? `Claude ${org}` : 'Claude', email: account.emailAddress || undefined }
 }
 
+// When this version was released. The manifest has no field for it (the validator warns on
+// unknown keys), so it lives here: set it alongside `version` in plugin.json on each release.
+const RELEASED = '21 Oct 2026'
+
 // This plugin's own version, from the manifest it was loaded from.
 async function pluginVersionOf($: EngineInterface): Promise<string | undefined> {
   const manifest = JSON.parse(await $.fs.read(join($.plugin.root, '.claude-plugin/plugin.json'))) as { version?: string }
@@ -655,7 +659,11 @@ export const register: Register = on => {
               width - labelWidth,
             ).map(runs => row('', <Text dimColor wrap="wrap">{runs.map(run => run.text).join('')}</Text>)),
           )}
-          {section('About', row('Version', <Text bold>{snap.pluginVersion ?? '–'}</Text>))}
+          {section(
+            'About',
+            row('Version', <Text bold>{snap.pluginVersion ?? '–'}</Text>),
+            row('Released', <Text>{RELEASED}</Text>),
+          )}
         </Box>
       )
     }
