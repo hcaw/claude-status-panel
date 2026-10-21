@@ -21,6 +21,32 @@ const effort = atom({ plugin: 'status-panel', key: 'effort' } as const, null)
 const shown = atom({ plugin: 'status-panel', key: 'shown' } as const, false)
 const tokens = atom({ plugin: 'status-panel', key: 'tokens' } as const, null)
 const history = atom({ plugin: 'status-panel', key: 'history' } as const, null)
+const tab = atom({ plugin: 'status-panel', key: 'tab' } as const, 'overview')
+// The section whose help is pinned open in the band by a click, or null.
+const helpTopic = atom({ plugin: 'status-panel', key: 'helpTopic' } as const, null)
+// Whether hovering a `?` opens its help; it needs a terminal that reports the pointer.
+const hoverHelp = atom({ plugin: 'status-panel', key: 'hoverHelp' } as const, false)
+const TABS = [
+  ['overview', 'Overview'],
+  ['settings', 'Settings'],
+] as const
+
+const NOTES: Record<string, string[]> = {
+  Context: ['Used is the share of the model window in use. Trend is the context size after each reply.'],
+  Tokens: ['Cached is cache reads and writes. Cache hit is the share of input served from the cache.'],
+  Limits: [
+    '┃ is how much of the window has passed. A fill beyond it means you are using the limit faster than the clock.',
+    'on pace for N% is where use lands at the reset at this rate. out in T means the limit comes first.',
+  ],
+}
+
+// Hover scopes link a section's `?` in the pane to its note in the band above the prompt:
+// the engine reveals one when the pointer is over the other, with no hook or state.
+const scopeOf = (title: string) => `help-${title}`
+
+// A click on a `?` pins its section's help; the same one again, or another's, closes or replaces it.
+const pinHelp = ($: EngineInterface, title: string) =>
+  update($, helpTopic, now => (now === title ? null : title))
 
 async function isOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE)
@@ -310,6 +336,45 @@ export const register: Register = on => {
     )
   })
 
+  // The band above the prompt shows the help pinned by a click, and holds the other notes
+  // hidden for a hover to reveal when that setting is on. It passes while a survey has it.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) return next(e)
+    const pinned = await read($, helpTopic)
+    const hovering = await read($, hoverHelp)
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const card = (title: string, props: object, closable = false) => (
+      <Box flexDirection="column" borderStyle="round" borderColor="inactive" paddingX={1} {...props}>
+        <Box flexDirection="row" justifyContent="space-between">
+          <Text bold>{title}</Text>
+          {closable ? (
+            <Button
+              key="status-panel-help-close"
+              plain
+              dimColor
+              role="dismiss"
+              label="×"
+              onPress={() => void update($, helpTopic, () => null).catch(() => undefined)}
+            />
+          ) : null}
+        </Box>
+        {(NOTES[title] ?? []).map(note => (
+          <Text dimColor wrap="wrap">
+            {note}
+          </Text>
+        ))}
+      </Box>
+    )
+    const hidden = hovering ? Object.keys(NOTES).filter(title => title !== pinned) : []
+    if (!pinned && !hidden.length) return next(e)
+    return (
+      <Box flexDirection="column">
+        {pinned ? card(pinned, {}, true) : null}
+        {hidden.map(title => card(title, { display: 'none', hover: { scope: scopeOf(title), display: 'flex' } }))}
+      </Box>
+    )
+  })
+
   on('turn.step', async function* ($, e, next) {
     if (e.effort !== undefined && e.agentId === undefined) {
       const level = String(e.effort)
@@ -332,11 +397,14 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
     const snap = await read($, snapshot)
     const live = await read($, effort)
     const used = await read($, tokens)
     const past = await read($, history)
+    const chosen = await read($, tab)
+    const current = TABS.find(([key]) => key === chosen)?.[0] ?? 'overview'
+    const hovering = await read($, hoverHelp)
 
     if (!snap) return <Text dimColor>Gathering status…</Text>
 
@@ -386,12 +454,35 @@ export const register: Register = on => {
     )
     // A title, then a dim rule to the pane's edge. Plain ink: colour is kept for the
     // charts, where it means something.
+    // A title and a dim rule to the edge; where the section has help, a `?` ends the rule
+    // and reveals that help in the band above the prompt while hovered.
+    const heading = (title: string) => {
+      const note = NOTES[title]
+      const rule = (reserve: number) =>
+        line([
+          { text: title, bold: true },
+          { text: ` ${'─'.repeat(Math.max(0, width - title.length - 1 - reserve))}`, color: 'inactive', dim: true },
+        ])
+      if (!note) return rule(0)
+      return (
+        <Box flexDirection="row">
+          <Box flexGrow={1}>{rule(2)}</Box>
+          <Text> </Text>
+          <Box hover={hovering ? { scope: scopeOf(title) } : undefined}>
+            <Button
+              key={`help-${title}`}
+              plain
+              dimColor
+              label="?"
+              onPress={() => void pinHelp($, title).catch(() => undefined)}
+            />
+          </Box>
+        </Box>
+      )
+    }
     const section = (title: string, ...rows: JSX.Element[]) => (
       <Box flexDirection="column" marginBottom={1}>
-        {line([
-          { text: title, bold: true },
-          { text: ` ${'─'.repeat(Math.max(0, width - title.length - 1))}`, color: 'inactive', dim: true },
-        ])}
+        {heading(title)}
         {rows}
       </Box>
     )
@@ -449,8 +540,58 @@ export const register: Register = on => {
       ]
     }
 
+    // The engine's close mark has a row of its own above the body that a mod cannot draw into
+    // (a tab row lifted onto it is clipped), so the tabs are the body's first row.
+    const tabs = (
+      <Box flexDirection="column" marginBottom={1}>
+        <Box flexDirection="row" gap={2}>
+          {TABS.map(([key, label]) =>
+            key === current ? (
+              <Text bold underline>
+                {label}
+              </Text>
+            ) : (
+              <Button
+                key={`tab-${key}`}
+                plain
+                dimColor
+                label={label}
+                onPress={() => void update($, tab, () => key).catch(() => undefined)}
+              />
+            ),
+          )}
+        </Box>
+        {line([{ text: '─'.repeat(width), color: 'inactive', dim: true }])}
+      </Box>
+    )
+
+    if (current === 'settings') {
+      return (
+        <Box flexDirection="column">
+          {tabs}
+          {section(
+            'Help',
+            row(
+              '',
+              <Button
+                key="setting-hover-help"
+                plain
+                label={`${hovering ? '[x]' : '[ ]'} Open help on hover`}
+                onPress={() => void update($, hoverHelp, now => !now).catch(() => undefined)}
+              />,
+            ),
+            ...pack(
+              [[{ text: 'Needs a terminal that reports pointer movement. If hovering a ? does nothing, leave this off and click it instead.', dim: true }]],
+              width - labelWidth,
+            ).map(runs => row('', <Text dimColor wrap="wrap">{runs.map(run => run.text).join('')}</Text>)),
+          )}
+        </Box>
+      )
+    }
+
     return (
       <Box flexDirection="column">
+        {tabs}
         {section(
           'Workspace',
           row('Directory', <Text color="ide" wrap="truncate-start">{home(snap.cwd)}</Text>),
@@ -503,9 +644,6 @@ export const register: Register = on => {
           'Limits',
           ...limit('5 hour', WINDOWS.fiveHour, snap.fiveHour),
           ...limit('7 day', WINDOWS.sevenDay, snap.sevenDay),
-          ...(snap.fiveHour?.resetsAt || snap.sevenDay?.resetsAt
-            ? [row('', line([{ text: '┃', bold: true }, { text: ' time elapsed', dim: true }]))]
-            : []),
         )}
         {pack([[{ text: '/status-panel to hide', dim: true }], [{ text: 'refreshes every 10s', dim: true }]], width).map(line)}
       </Box>

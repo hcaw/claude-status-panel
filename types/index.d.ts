@@ -29,6 +29,9 @@ declare module 'claude-code' {
       shown: boolean
       tokens: Tokens | null
       history: History | null
+      tab: string
+      helpTopic: string | null
+      hoverHelp: boolean
     }
   }
 }
