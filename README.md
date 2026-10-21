@@ -62,7 +62,7 @@ Answer `y` to add the marketplace, then pick the user scope.
   }
   ```
 
-The pane refreshes every 10 seconds and after each turn while it is open, and does no work while it is closed. It is only ever opened when you ask, never on its own.
+The pane refreshes every 10 seconds by default (5 seconds to 5 minutes, chosen on the Settings tab) and after each turn while it is open, and does no work while it is closed. It is only ever opened when you ask, never on its own.
 
 ## Privacy
 

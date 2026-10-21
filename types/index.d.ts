@@ -32,6 +32,7 @@ declare module 'claude-code' {
       tab: string
       helpTopic: string | null
       hoverHelp: boolean
+      refreshSecs: number
     }
   }
 }

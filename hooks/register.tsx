@@ -6,7 +6,23 @@ import { meter, spark, width as cellsOf, type Run } from './charts'
 
 const PANE = 'status-panel'
 const TITLE = 'Status'
-const REFRESH_MS = 10_000
+// The refresh timer ticks at the finest step of the choices and refreshes once the chosen
+// period has passed, so a change of setting takes effect within a tick.
+const TICK_MS = 5_000
+// Seconds, shortest first: the bounds are the first and last, and a stored value outside
+// them (or between) falls back to the nearest choice.
+const REFRESH_CHOICES = [
+  [5, '5s'],
+  [10, '10s'],
+  [30, '30s'],
+  [60, '1m'],
+  [300, '5m'],
+] as const
+const DEFAULT_REFRESH = 10
+const refreshChoice = (stored: unknown): number => {
+  const wanted = typeof stored === 'number' && Number.isFinite(stored) ? stored : DEFAULT_REFRESH
+  return REFRESH_CHOICES.reduce((best, [secs]) => (Math.abs(secs - wanted) < Math.abs(best - wanted) ? secs : best), DEFAULT_REFRESH)
+}
 // The largest file `$.fs.read` returns.
 const READ_LIMIT = 4 * 1024 * 1024
 const NO_TOKENS: Tokens = { input: 0, output: 0, cached: 0, cacheRead: 0, total: 0 }
@@ -26,6 +42,7 @@ const tab = atom({ plugin: 'status-panel', key: 'tab' } as const, 'overview')
 const helpTopic = atom({ plugin: 'status-panel', key: 'helpTopic' } as const, null)
 // Whether hovering a `?` opens its help; it needs a terminal that reports the pointer.
 const hoverHelp = atom({ plugin: 'status-panel', key: 'hoverHelp' } as const, false)
+const refreshSecs = atom({ plugin: 'status-panel', key: 'refreshSecs' } as const, DEFAULT_REFRESH)
 const TABS = [
   ['overview', 'Overview'],
   ['settings', 'Settings'],
@@ -275,10 +292,14 @@ export const register: Register = on => {
       name: 'status-panel',
       description: 'Toggle a pane showing everything from the status line',
     })
-    $.clock.every(REFRESH_MS, () => {
-      void isOpen($)
-        .then(open => (open ? refresh($) : undefined))
-        .catch(() => undefined)
+    $.clock.every(TICK_MS, () => {
+      void (async () => {
+        if (!(await isOpen($))) return
+        const last = (await read($, snapshot))?.updatedAt
+        const period = refreshChoice(await read($, refreshSecs)) * 1000
+        // A tick's worth of slack, so a 10 s period is not pushed to 15 s by timer jitter.
+        if (last === undefined || (await $.clock.now()) - last >= period - TICK_MS / 2) await refresh($)
+      })().catch(() => undefined)
     })
     // Token totals and history live in `$.state`, which a hot reload keeps; a session
     // resumed in a new process starts without them, so they begin from its transcript.
@@ -405,6 +426,7 @@ export const register: Register = on => {
     const chosen = await read($, tab)
     const current = TABS.find(([key]) => key === chosen)?.[0] ?? 'overview'
     const hovering = await read($, hoverHelp)
+    const every = refreshChoice(await read($, refreshSecs))
 
     if (!snap) return <Text dimColor>Gathering status…</Text>
 
@@ -570,6 +592,29 @@ export const register: Register = on => {
         <Box flexDirection="column">
           {tabs}
           {section(
+            'Refresh',
+            // Presets rather than a free field: the bounds hold by construction.
+            row(
+              'Every',
+              <Box flexDirection="row" gap={1}>
+                {REFRESH_CHOICES.map(([secs, label]) =>
+                  secs === every ? (
+                    <Text bold>{`[${label}]`}</Text>
+                  ) : (
+                    <Button
+                      key={`refresh-${secs}`}
+                      plain
+                      dimColor
+                      label={label}
+                      onPress={() => void update($, refreshSecs, () => secs).catch(() => undefined)}
+                    />
+                  ),
+                )}
+              </Box>,
+            ),
+            row('', <Text dimColor wrap="wrap">Between 5 seconds and 5 minutes. The pane also refreshes after each turn.</Text>),
+          )}
+          {section(
             'Help',
             row(
               '',
@@ -645,7 +690,6 @@ export const register: Register = on => {
           ...limit('5 hour', WINDOWS.fiveHour, snap.fiveHour),
           ...limit('7 day', WINDOWS.sevenDay, snap.sevenDay),
         )}
-        {pack([[{ text: '/status-panel to hide', dim: true }], [{ text: 'refreshes every 10s', dim: true }]], width).map(line)}
       </Box>
     )
   })
