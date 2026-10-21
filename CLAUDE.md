@@ -55,5 +55,5 @@ Tests use `claude-code/testing`. Nothing beneath the plugin answers engine event
 
 - British English in docs and comments, and no em dashes.
 - Line endings are LF everywhere (`.gitattributes`, `.editorconfig`), whatever the host's `core.autocrlf`. CI (`.github/workflows/ci.yml`) type-checks, tests and validates on Linux, macOS and Windows, installing the Claude Code CLI from npm; it needs no sign-in. Keep tests free of platform-specific paths.
-- The screenshots in `docs/` are SVGs rendered from the pane's own drawn tree (mount `Pane` in a test with sample data, then lay the tree out as the `lines()` helper in `tests/panel.test.tsx` does). Use example values only, never real paths or emails. Regenerate them when the pane's layout changes.
+- The screenshot `docs/pane.png` is rendered (SVG, then rasterised at 2x so it shows anywhere) from the pane's own drawn tree (mount `Pane` in a test with sample data, then lay the tree out as the `lines()` helper in `tests/panel.test.tsx` does). Use example values only, never real paths or emails. Regenerate them when the pane's layout changes.
 - The repo is public and MIT licensed: keep personal paths, emails and session data out of code, tests, docs and commit messages.

@@ -11,10 +11,7 @@ A [Claude Code](https://code.claude.com) mod that shows your session, workspace,
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
 ![Dependencies](https://img.shields.io/badge/runtime%20dependencies-none-brightgreen)
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/pane-light.svg">
-  <img src="docs/pane-dark.svg" alt="The status-panel pane: workspace, session, account, context, token and limit sections, with meters and sparklines" width="420">
-</picture>
+<img src="docs/pane.png" alt="The status-panel pane: workspace, session, account, context, token and limit sections, with meters and sparklines" width="420">
 
 </div>
 
@@ -91,7 +88,7 @@ claude --plugin-dir .   # a session that loads this working copy and reloads it 
 
 Development works the same on macOS, Linux, Windows and Claude Code cloud sessions: line endings are pinned to LF by `.gitattributes`, paths in the mod are joined with `/`, and CI type-checks, tests and validates on all three operating systems. See [CLAUDE.md](CLAUDE.md) for how the mod is put together.
 
-The images above are rendered from the mod's own drawing of the pane, with sample data, so they show exactly what it draws.
+The image above is rendered from the mod's own drawing of the pane, with sample data, so it shows exactly what it draws.
 
 ## Licence
 
