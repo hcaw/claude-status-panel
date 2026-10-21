@@ -132,6 +132,12 @@ async function accountOf($: EngineInterface): Promise<Pick<Snapshot, 'plan' | 'e
   return { plan: org ? `Claude ${org}` : 'Claude', email: account.emailAddress || undefined }
 }
 
+// This plugin's own version, from the manifest it was loaded from.
+async function pluginVersionOf($: EngineInterface): Promise<string | undefined> {
+  const manifest = JSON.parse(await $.fs.read(join($.plugin.root, '.claude-plugin/plugin.json'))) as { version?: string }
+  return manifest.version || undefined
+}
+
 const addUsage = (sum: Tokens, usage: ModelUsage): Tokens => {
   const input = sum.input + usage.input_tokens
   const output = sum.output + usage.output_tokens
@@ -207,12 +213,13 @@ async function transcriptUsage($: EngineInterface): Promise<{ tokens: Tokens; hi
 
 async function refresh($: EngineInterface): Promise<void> {
   const cwd = await $.session.cwd()
-  const [usage, version, model, branch, account] = await Promise.all([
+  const [usage, version, model, branch, account, pluginVersion] = await Promise.all([
     $.session.usage(),
     $.session.version(),
     $.session.model(),
     branchOf($, cwd).catch(() => undefined),
     accountOf($).catch(() => ({})),
+    pluginVersionOf($).catch(() => undefined),
   ])
   const limit = (kind: string) => {
     const found = usage.rateLimits.find(one => one.kind === kind)
@@ -224,6 +231,7 @@ async function refresh($: EngineInterface): Promise<void> {
     updatedAt: await $.clock.now(),
     cwd,
     version: version.version,
+    pluginVersion,
     model,
     startedAt: usage.startedAt,
     context: usage.context,
@@ -647,6 +655,7 @@ export const register: Register = on => {
               width - labelWidth,
             ).map(runs => row('', <Text dimColor wrap="wrap">{runs.map(run => run.text).join('')}</Text>)),
           )}
+          {section('About', row('Version', <Text bold>{snap.pluginVersion ?? '–'}</Text>))}
         </Box>
       )
     }

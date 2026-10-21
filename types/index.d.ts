@@ -3,6 +3,8 @@ export type Snapshot = {
   cwd: string
   branch?: string
   version?: string
+  // This plugin's version, from its plugin.json.
+  pluginVersion?: string
   model?: string
   startedAt?: number
   plan?: string

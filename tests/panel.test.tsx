@@ -88,6 +88,26 @@ test('the pane reads branch and account through $, with no process', async ($, o
   }
 })
 
+test('the Settings tab shows the plugin version from its manifest', async ($, on) => {
+  stubEngine(on, { '.claude-plugin/plugin.json': JSON.stringify({ name: 'status-panel', version: '9.8.7' }) })
+  await $.command.run(RUN)
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({
+      plugin: 'status-panel',
+      surface,
+      component: 'Pane',
+      requestId: 'status-panel',
+      props: PANE_PROPS,
+    })
+    await ui.press({ key: 'tab-settings' })
+    expect(await ui.find({ type: 'Text', text: /^9\.8\.7$/ })).toBeDefined()
+    // The tab is kept in state, so go back before the next surface.
+    await ui.press({ key: 'tab-overview' })
+    await ui.unmount()
+  }
+})
+
 test('token totals add up the main loop responses, not a subagent', async ($, on) => {
   stubEngine(on)
   on('turn.step', async function* ($, e) {
