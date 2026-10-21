@@ -234,9 +234,18 @@ async function refresh($: EngineInterface): Promise<void> {
   await update($, snapshot, () => next)
 }
 
-async function toggle($: EngineInterface): Promise<void> {
+// The pane docks beside the transcript only in the fullscreen layout, so that is the only place
+// it opens; a pane already open can always be closed.
+async function toggle($: EngineInterface, isFullscreen: boolean | undefined): Promise<void> {
   if (await isOpen($)) {
     await $.ui.close({ id: PANE })
+    // The `ui.close` hook clears this for the command and the close mark; a close from the
+    // footer button does not reach it, so clear it here too.
+    await update($, shown, () => false)
+    return
+  }
+  if (isFullscreen !== true) {
+    $.ui.toast('The status panel needs fullscreen mode')
     return
   }
   await $.ui.open({ id: PANE, title: TITLE })
@@ -288,6 +297,8 @@ const levelColour = (percent?: number) =>
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    // No pane is open in a new session, whatever a kept state says.
+    await update($, shown, () => false)
     await $.command.register({
       name: 'status-panel',
       description: 'Toggle a pane showing everything from the status line',
@@ -325,8 +336,8 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'status-panel' }, async $ => {
-    await toggle($)
+  on('command.run', { command: 'status-panel' }, async ($, e) => {
+    await toggle($, e.presentation.isFullscreen)
     return {}
   })
 
@@ -343,16 +354,20 @@ export const register: Register = on => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const isShown = await read($, shown)
     const modes = e.props.modes.join(' & ')
+    // The pane only opens in the fullscreen layout, so only there is there a button.
+    const fullscreen = e.viewport?.isFullscreen === true
     return (
       <Box flexDirection="row">
-        {modes ? <Text dimColor>{`${modes} · `}</Text> : null}
-        <Button
-          key="status-panel-toggle"
-          plain
-          dimColor
-          label={isShown ? '▣ status' : '▢ status'}
-          onPress={() => void toggle($).catch(() => undefined)}
-        />
+        {modes ? <Text dimColor>{fullscreen ? `${modes} · ` : modes}</Text> : null}
+        {fullscreen ? (
+          <Button
+            key="status-panel-toggle"
+            plain
+            dimColor
+            label={isShown ? '■ status' : '□ status'}
+            onPress={() => void toggle($, true).catch(() => undefined)}
+          />
+        ) : null}
       </Box>
     )
   })

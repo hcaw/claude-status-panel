@@ -50,7 +50,7 @@ Answer `y` to add the marketplace, then pick the user scope.
 ## Use
 
 - **`/status-panel`** toggles the pane.
-- The footer row under the prompt shows a `▢ status` / `▣ status` toggle you can click.
+- The footer row under the prompt shows a `□ status` / `■ status` toggle you can click.
 - For a keyboard shortcut, add a command binding to `~/.claude/keybindings.json`:
 
   ```json
