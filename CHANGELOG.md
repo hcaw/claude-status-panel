@@ -4,6 +4,8 @@ All notable changes to status-panel. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-21
+
 The release date and summary on the Settings tab now come from this changelog, and installing no longer downloads TypeScript.
 
 ### Added
@@ -101,7 +103,8 @@ First release: session, workspace, account and usage details in a side pane togg
 - Workspace, Session, Account, Context, Tokens and Limits sections, refreshed every 10 seconds and after each turn while the pane is open.
 - A footer button and an optional keybinding to toggle the pane.
 
-[unreleased]: https://github.com/hcaw/claude-status-panel/compare/status-panel--v0.8.0...HEAD
+[unreleased]: https://github.com/hcaw/claude-status-panel/compare/status-panel--v0.9.0...HEAD
+[0.9.0]: https://github.com/hcaw/claude-status-panel/compare/status-panel--v0.8.0...status-panel--v0.9.0
 [0.8.0]: https://github.com/hcaw/claude-status-panel/compare/status-panel--v0.7.0...status-panel--v0.8.0
 [0.7.0]: https://github.com/hcaw/claude-status-panel/compare/status-panel--v0.6.0...status-panel--v0.7.0
 [0.6.0]: https://github.com/hcaw/claude-status-panel/compare/status-panel--v0.5.0...status-panel--v0.6.0
