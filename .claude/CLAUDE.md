@@ -14,19 +14,27 @@ The mod API is early access and changes between Claude Code releases. The author
 npm install                  # dev tooling only: pinned TypeScript; the mod has no runtime dependencies
 npm run typecheck            # tsc -p .
 npm test                     # claude plugin test .: runs every tests/*.test.ts(x); there is no per-test filter, so run one file by moving others aside or narrowing with describe/test names
-npm run validate             # claude plugin validate .: manifest, marketplace file and hooks module, as the engine reads them
+npm run validate             # claude plugin validate --strict .: manifest, marketplace file and hooks module, as the engine reads them; any warning fails
+npm run check                # all three, then scripts/release.mjs --check (plugin.json and CHANGELOG.md agree); what CI runs
+npm run release              # cut a release: see Releasing below
 claude --plugin-dir .        # a session that loads this working copy and hot-reloads it on save
 ```
+
+There is no `package-lock.json`, on purpose (it is gitignored): with a lockfile beside `package.json`, Claude Code installs the dev dependencies into every user's plugin cache. TypeScript is pinned exactly in `package.json` instead.
 
 ## Types
 
 The `claude-code` module is not an npm package: the engine supplies it at run time, and it is the only bare import a hooks module may use. Its declarations are vendored in `types/claude-code.d.ts` (the pattern of Anthropic's built-in mods in `anthropics/claude-code/mods`), so a fresh clone type-checks with only `npm install`. `tsconfig.json` is self-contained, with the options from that file's header, and includes `types`, `hooks` and `tests`.
 
-The engine also writes its own copy to `.claude-plugin/types/` (gitignored) whenever it loads the mod from this folder. `tsconfig.json` deliberately does not include that folder, so the two copies never clash. The vendored file's first line names the Claude Code version that wrote it. After a Claude Code update, refresh it by running `claude --plugin-dir .` once, then `cp .claude-plugin/types/claude-code/index.d.ts types/claude-code.d.ts`, then `npm run typecheck`. Never edit it by hand.
+The engine also writes its own copy to `.claude-plugin/types/` (gitignored) whenever it loads the mod from this folder. `tsconfig.json` deliberately does not include that folder, so the two copies never clash. The vendored file's first line names the Claude Code version that wrote it. After a Claude Code update, refresh it by running `claude --plugin-dir .` once, then `cp .claude-plugin/types/claude-code/index.d.ts types/claude-code.d.ts`, then `npm run typecheck`. Never edit it by hand. CI pins the Claude Code it checks against (`CLAUDE_CODE_VERSION` in `ci.yml`): bump that in the same commit as a refreshed d.ts.
 
-## Releasing a change
+## Releasing
 
-The installed plugin runs a cached copy from GitHub, not this folder. After editing: bump `version` in `.claude-plugin/plugin.json` and set `RELEASED` in `hooks/register.tsx` to the day's date (shown on the Settings tab), commit, push, then `claude plugin update status-panel@hcaw-status-panel` and `/reload-plugins` in a session.
+The installed plugin runs a cached copy from GitHub, not this folder, and `claude plugin update` follows `version` in `.claude-plugin/plugin.json` on main: that is the only version (none in `marketplace.json` or `package.json`), and pushing a bump is what ships.
+
+- Every user-facing change gets a bullet under `## [Unreleased]` in `CHANGELOG.md` (Keep a Changelog), below a one-line summary that the Settings tab shows under the release date.
+- To release, use the `release` skill (`.claude/skills/release`), which drives `npm run release`: it dates the changelog section, bumps the version, runs `npm run check`, commits `release: X.Y.Z`, tags `status-panel--vX.Y.Z` with `claude plugin tag`, pushes, publishes the GitHub release, updates the local install and waits for CI. `--dry-run` previews it; `--finish` resumes after the push.
+- Never move a pushed tag: fix forward with a patch release.
 
 ## Architecture
 
@@ -37,6 +45,7 @@ All behaviour lives in `hooks/register.tsx` (named by `hooks/hooks.json`), with 
 - **Where the figures come from:** everything goes through `$`, with no `$.process.run` and no dependency on git, Python or anything else installed, so it behaves the same on every OS. Each piece is optional and a missing one renders as `–`.
   - `$.session.usage()` (context window, rate limits, cost, `startedAt`), `$.session.version()`, `$.session.model()`, and effort captured from `turn.step` (falling back to `effortLevel` / `modelSettings` in settings).
   - Branch: `branchOf` walks up from cwd with `$.fs` to the nearest `.git` (a folder, or a `gitdir:` file in a worktree or submodule) and reads `HEAD`; a detached HEAD shows its short commit. There is no engine API for a working-tree diff, so there are no line counts or status flags.
+  - Plugin version, release date and summary (Settings tab, About): `aboutOf` reads `.claude-plugin/plugin.json` and `CHANGELOG.md` under `$.plugin.root`, and `releaseOf` in `hooks/changelog.ts` (pure, like `charts.ts`) finds the dated `## [X.Y.Z] - YYYY-MM-DD` heading for that version. A working copy between releases has none, so it shows `–`.
   - Plan and email: `oauthAccount` in Claude Code's `.claude.json`, under `CLAUDE_CONFIG_DIR` or the home folder (`USERPROFILE`, then `HOME`).
   - Token totals and history: the `tokens` and `history` keys, from each main-loop `turn.step` result's `usage` (history keeps each response's context size and output, capped at 240, for the sparklines) and reset by `session.end` with reason `clear`. `$.state` survives a hot reload but not a resume in a new process, so `session.start` seeds them once from the transcript `<projects>/*/<session_id>.jsonl`, skipped above `$.fs.read`'s 4 MiB limit. A field added to a stored shape is read as optional, since a hot reload keeps the old value.
   - Paths are joined with `/`; the engine hands hooks (and tests' stubs) the platform's own separators.
@@ -54,6 +63,6 @@ Tests use `claude-code/testing`. Nothing beneath the plugin answers engine event
 ## Conventions
 
 - British English in docs and comments, and no em dashes.
-- Line endings are LF everywhere (`.gitattributes`, `.editorconfig`), whatever the host's `core.autocrlf`. CI (`.github/workflows/ci.yml`) type-checks, tests and validates on Linux, macOS and Windows, installing the Claude Code CLI from npm; it needs no sign-in. Keep tests free of platform-specific paths.
+- Line endings are LF everywhere (`.gitattributes`, `.editorconfig`), whatever the host's `core.autocrlf`. CI (`.github/workflows/ci.yml`) runs `npm run check` on Linux, macOS and Windows, installing the pinned Claude Code CLI from npm (and the latest one in a weekly run); it needs no sign-in. Keep tests free of platform-specific paths.
 - The screenshot `docs/pane.png` is rendered (SVG, then rasterised at 2x so it shows anywhere) from the pane's own drawn tree (mount `Pane` in a test with sample data, then lay the tree out as the `lines()` helper in `tests/panel.test.tsx` does). Use example values only, never real paths or emails. Regenerate them when the pane's layout changes.
 - The repo is public and MIT licensed: keep personal paths, emails and session data out of code, tests, docs and commit messages.

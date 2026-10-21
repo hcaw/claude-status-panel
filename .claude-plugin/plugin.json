@@ -4,7 +4,11 @@
   "description": "Claude session status in a side pane toggled with /status-panel",
   "types": "./types/index.d.ts",
   "author": {
-    "name": "Harry Wright"
+    "name": "Harry Wright",
+    "url": "https://github.com/hcaw"
   },
-  "repository": "https://github.com/hcaw/claude-status-panel"
+  "homepage": "https://github.com/hcaw/claude-status-panel#readme",
+  "repository": "https://github.com/hcaw/claude-status-panel",
+  "license": "MIT",
+  "keywords": ["status", "pane", "usage", "rate-limits", "mod"]
 }

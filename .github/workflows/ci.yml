@@ -4,6 +4,25 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+  # Weekly against the latest Claude Code, so a release that breaks the mod shows up unprompted.
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Every commit on main keeps its result, which the release script waits on.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The Claude Code the mod is checked against. Bump it on purpose, in the same commit as
+  # types/claude-code.d.ts refreshed from that version (its first line names it).
+  CLAUDE_CODE_VERSION: 2.1.306
+  DISABLE_AUTOUPDATER: 1
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: 1
 
 jobs:
   check:
@@ -12,14 +31,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm install --global @anthropic-ai/claude-code
-      - run: npm test
-      - run: npm run validate
+      # No lockfile on purpose (see .gitignore); TypeScript is pinned exactly in package.json.
+      - run: npm install --no-audit --no-fund
+      - run: npm install --global "@anthropic-ai/claude-code@${{ github.event_name == 'schedule' && 'latest' || env.CLAUDE_CODE_VERSION }}"
+      - run: npm run check

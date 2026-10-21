@@ -1,14 +1,20 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "hcaw-status-panel",
   "description": "Claude Code mods by Harry Wright, starting with status-panel: a toggleable side pane of session, account and usage details",
   "owner": {
-    "name": "Harry Wright"
+    "name": "Harry Wright",
+    "url": "https://github.com/hcaw"
   },
   "plugins": [
     {
       "name": "status-panel",
       "source": "./",
-      "description": "Claude session status in a side pane toggled with /status-panel"
+      "description": "Claude session status in a side pane toggled with /status-panel",
+      "category": "productivity",
+      "homepage": "https://github.com/hcaw/claude-status-panel#readme",
+      "license": "MIT",
+      "keywords": ["status", "pane", "usage", "rate-limits", "mod"]
     }
   ]
 }

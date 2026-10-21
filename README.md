@@ -6,6 +6,7 @@
 
 A [Claude Code](https://code.claude.com) mod that shows your session, workspace, account and usage at a glance, with meters and sparklines drawn in your theme's colours.
 
+[![Release](https://img.shields.io/github/v/release/hcaw/claude-status-panel)](https://github.com/hcaw/claude-status-panel/releases/latest)
 [![CI](https://github.com/hcaw/claude-status-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/hcaw/claude-status-panel/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
@@ -42,7 +43,21 @@ In a Claude Code terminal session:
 /plugin install status-panel --marketplace hcaw/claude-status-panel
 ```
 
-Answer `y` to add the marketplace, then pick the user scope.
+Answer `y` to add the marketplace, then pick the user scope, then run `/reload-plugins`. From a terminal instead:
+
+```
+claude plugin marketplace add hcaw/claude-status-panel
+claude plugin install status-panel@hcaw-status-panel
+```
+
+### Update
+
+```
+claude plugin marketplace update hcaw-status-panel
+claude plugin update status-panel@hcaw-status-panel
+```
+
+Then `/reload-plugins` in any open session. To update automatically, turn on auto-update for `hcaw-status-panel` under `/plugin` > Marketplaces (it is off by default for third-party marketplaces). See [what's new](CHANGELOG.md); the Settings tab shows the installed version and when it was released.
 
 > [!NOTE]
 > Mods are an early access feature of Claude Code, so you need a version that supports them, and the mod API may change between releases.
@@ -69,7 +84,7 @@ The pane refreshes every 10 seconds by default (5 seconds to 5 minutes, chosen o
 Everything comes from Claude Code itself, so the mod:
 
 - makes no network requests and runs no other programs (no `git`, Python or shell), which is also why it behaves the same on macOS, Linux and Windows;
-- reads only local files through Claude Code: the git `HEAD` of your working directory for the branch, Claude Code's own `.claude.json` for your plan and email, and the current session's transcript to restore token totals when you resume;
+- reads only local files through Claude Code: the git `HEAD` of your working directory for the branch, Claude Code's own `.claude.json` for your plan and email, the current session's transcript to restore token totals when you resume, and its own `plugin.json` and `CHANGELOG.md` for the version and release date;
 - stores nothing outside the session.
 
 Your email address is shown in the pane, so close it before sharing your screen if that matters to you.
@@ -82,11 +97,13 @@ You need [Claude Code](https://code.claude.com) and Node.js 20 or later. TypeScr
 npm install          # TypeScript, for type-checking only
 npm run typecheck    # tsc -p . against the vendored types in types/claude-code.d.ts
 npm test             # claude plugin test .
-npm run validate     # claude plugin validate .
+npm run validate     # claude plugin validate --strict .
+npm run check        # all of the above, plus a check that plugin.json and CHANGELOG.md agree
+npm run release      # cut a release: changelog, version, tag, GitHub release (--dry-run to preview)
 claude --plugin-dir .   # a session that loads this working copy and reloads it on save
 ```
 
-Development works the same on macOS, Linux, Windows and Claude Code cloud sessions: line endings are pinned to LF by `.gitattributes`, paths in the mod are joined with `/`, and CI type-checks, tests and validates on all three operating systems. See [CLAUDE.md](CLAUDE.md) for how the mod is put together.
+Development works the same on macOS, Linux, Windows and Claude Code cloud sessions: line endings are pinned to LF by `.gitattributes`, paths in the mod are joined with `/`, and CI runs `npm run check` on all three operating systems. See [.claude/CLAUDE.md](.claude/CLAUDE.md) for how the mod is put together and released.
 
 The image above is rendered from the mod's own drawing of the pane, with sample data, so it shows exactly what it draws.
 
