@@ -1,6 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { effortColour, hue } from '../hooks/colours'
+
 const RUN = {
   command: 'status-panel',
   args: '',
@@ -30,7 +32,7 @@ const IDLE_USAGE = { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [
 
 // A session in a git repository, signed in to a Max plan: everything the
 // panel gathers comes through `$`, with no process run. `files` adds files by path.
-function stubEngine(on: On, files: Record<string, string> = {}, usage: object = IDLE_USAGE) {
+function stubEngine(on: On, files: Record<string, string> = {}, usage: object = IDLE_USAGE, settings: object = {}) {
   const file = (path: string) => Object.entries(files).find(([name]) => isPath(path, name))?.[1]
   let isUp = false
   on('ui.open', () => {
@@ -45,7 +47,7 @@ function stubEngine(on: On, files: Record<string, string> = {}, usage: object = 
   on('session.version', () => ({ value: { version: '2.1.291', base: '2.1.291' } }))
   on('session.usage', () => ({ value: usage as typeof IDLE_USAGE }))
   on('clock.now', () => ({ value: 60_000 }))
-  on('settings.read', () => ({ value: {} }))
+  on('settings.read', () => ({ value: settings as Record<string, unknown> }))
   on('env.get', ($, e) => ({ value: e.name === 'USERPROFILE' ? HOME : undefined }))
   on('fs.exists', ($, e) => ({ value: file(e.path) !== undefined }))
   on('fs.stat', ($, e) => {
@@ -86,6 +88,82 @@ test('the pane reads branch and account through $, with no process', async ($, o
     expect(await ui.find({ type: 'Text', text: /^someone@example\.com$/ })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('version, model and email take the hue of their value, effort its place on the ramp', async ($, on) => {
+  // The plugin's version is the session's, so the two Version rows must match in colour.
+  stubEngine(
+    on,
+    { '.claude-plugin/plugin.json': JSON.stringify({ name: 'status-panel', version: '2.1.291' }) },
+    IDLE_USAGE,
+    { effortLevel: 'high' },
+  )
+  await $.command.run(RUN)
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({
+      plugin: 'status-panel',
+      surface,
+      component: 'Pane',
+      requestId: 'status-panel',
+      props: PANE_PROPS,
+    })
+    const colourOf = async (text: string) => (await ui.find({ type: 'Text', text }))?.props.color
+    for (const value of ['2.1.291', 'claude-opus-5-5', 'someone@example.com']) {
+      expect(await colourOf(value)).toBe(hue(value))
+    }
+    expect(await colourOf('high')).toBe(effortColour('high'))
+    await ui.press({ key: 'tab-settings' })
+    expect(await colourOf('2.1.291')).toBe(hue('2.1.291'))
+    await ui.press({ key: 'tab-overview' })
+    await ui.unmount()
+  }
+})
+
+test('a light theme takes the deeper tone of each colour', async ($, on) => {
+  stubEngine(on, {}, IDLE_USAGE, { effortLevel: 'max' })
+  on('config.list', () => ({
+    value: [
+      {
+        key: 'theme',
+        label: 'Theme',
+        kind: 'choice',
+        value: 'light-daltonized',
+        provider: { plugin: 'engine', tier: 'core' },
+        isLocked: false,
+      },
+    ],
+  }))
+  await $.command.run(RUN)
+
+  const ui = await $.ui.mount({
+    plugin: 'status-panel',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'status-panel',
+    props: PANE_PROPS,
+  })
+  expect((await ui.find({ type: 'Text', text: 'claude-opus-5-5' }))?.props.color).toBe(hue('claude-opus-5-5', 'light'))
+  expect((await ui.find({ type: 'Text', text: /^max$/ }))?.props.color).toBe(effortColour('max', 'light'))
+  await ui.unmount()
+})
+
+test('a missing effort or email is a dim dash, not a hue', async ($, on) => {
+  // Signed in with no email, and no effort chosen or seen.
+  stubEngine(on, { '.claude.json': JSON.stringify({ oauthAccount: { organizationType: 'claude_max' } }) })
+  await $.command.run(RUN)
+
+  const ui = await $.ui.mount({
+    plugin: 'status-panel',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'status-panel',
+    props: PANE_PROPS,
+  })
+  const dashes = await ui.findAll({ type: 'Text', text: /^–$/ })
+  expect(dashes.filter(dash => dash.props.dimColor).length).toBeGreaterThanOrEqual(2)
+  for (const dash of dashes) expect(dash.props.color).toBeUndefined()
+  await ui.unmount()
 })
 
 const CHANGELOG = `# Changelog

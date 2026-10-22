@@ -33,6 +33,8 @@ A status line is one row, so every figure you add crowds out another. `status-pa
 
 Each limit is coloured by its outlook, with when it resets and a projection: *on pace for 43%*, or *out in 1h 10m* when you would run out first.
 
+The version, model and email each take one of 50 colours picked from their value, so the same value is always the same colour and a change stands out. Effort runs from light yellow for `low` to bright red for `max`. These colours come in a brighter tone for dark themes and a deeper one for light themes.
+
 The charts are thin lines and block characters in your theme's colours, so they need no fonts or images, fit the pane at any width and look right in light and dark themes alike.
 
 ## Install
