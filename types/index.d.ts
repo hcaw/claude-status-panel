@@ -12,6 +12,8 @@ export type Snapshot = {
   startedAt?: number
   plan?: string
   email?: string
+  // Whether the theme is light or dark, for the colours that are not theme keys.
+  tone?: 'light' | 'dark'
   context: { tokens?: number; window: number; percent?: number }
   fiveHour?: { percent: number; resetsAt?: string }
   sevenDay?: { percent: number; resetsAt?: string }

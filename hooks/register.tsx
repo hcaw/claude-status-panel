@@ -4,6 +4,7 @@ import type { EngineInterface, ModelUsage, Register } from 'claude-code'
 import type { History, Snapshot, Tokens } from '../types'
 import { dayOf, releaseOf } from './changelog'
 import { meter, spark, width as cellsOf, type Run } from './charts'
+import { effortColour, hue, toneOf } from './colours'
 
 const PANE = 'status-panel'
 const TITLE = 'Status'
@@ -220,13 +221,14 @@ async function transcriptUsage($: EngineInterface): Promise<{ tokens: Tokens; hi
 
 async function refresh($: EngineInterface): Promise<void> {
   const cwd = await $.session.cwd()
-  const [usage, version, model, branch, account, about] = await Promise.all([
+  const [usage, version, model, branch, account, about, theme] = await Promise.all([
     $.session.usage(),
     $.session.version(),
     $.session.model(),
     branchOf($, cwd).catch(() => undefined),
     accountOf($).catch(() => ({})),
     aboutOf($).catch(() => ({})),
+    $.config.list().then(rows => rows.find(row => row.key === 'theme')?.value, () => undefined),
   ])
   const limit = (kind: string) => {
     const found = usage.rateLimits.find(one => one.kind === kind)
@@ -245,6 +247,7 @@ async function refresh($: EngineInterface): Promise<void> {
     fiveHour: limit('five_hour'),
     sevenDay: limit('seven_day'),
     costUsd: usage.cost?.usd,
+    tone: toneOf(theme),
   }
   await update($, snapshot, () => next)
 }
@@ -465,7 +468,7 @@ export const register: Register = on => {
     const width = e.props.bodyColumns
     // Labels are at most nine characters, so ten keeps a gap after the longest.
     const labelWidth = Math.min(12, Math.max(10, Math.floor(width / 4)))
-    const thinking = live ?? (await configuredEffort($, snap.model)) ?? '–'
+    const thinking = live ?? (await configuredEffort($, snap.model))
     // The cells a chart has beside its label, leaving `room` for a figure after it.
     const cells = (room = 0) => Math.max(4, Math.min(48, width - labelWidth - room))
     // Parts joined by ` · ` while they fit in `room` cells, a new line for each that does not.
@@ -543,6 +546,17 @@ export const register: Register = on => {
     // Figures in text ink; the chart beside one carries its status colour.
     const percent = (value?: number) =>
       value === undefined ? <Text dimColor>–</Text> : <Text bold>{`${Math.round(value)}%`}</Text>
+    // A value that names something, in its own hue: the same value is the same colour
+    // wherever it shows, so a change of it stands out. A missing one is a dim `–`.
+    const tone = snap.tone ?? 'dark'
+    const named = (value: string | undefined, bold = false, wrap?: 'truncate', color = hue(value, tone)) =>
+      value ? (
+        <Text color={color} bold={bold} wrap={wrap}>
+          {value}
+        </Text>
+      ) : (
+        <Text dimColor>–</Text>
+      )
     // A figure right-aligned in a column, so a list of them reads down by magnitude.
     const figure = (text: string, bold = false) => (
       <Box width={7} flexShrink={0} justifyContent="flex-end">
@@ -664,7 +678,7 @@ export const register: Register = on => {
           )}
           {section(
             'About',
-            row('Version', <Text bold>{snap.pluginVersion ?? '–'}</Text>),
+            row('Version', named(snap.pluginVersion, true)),
             row('Released', <Text>{(snap.released && dayOf(snap.released)) ?? '–'}</Text>),
             ...(snap.releaseNote ? [row('', <Text dimColor wrap="wrap">{snap.releaseNote}</Text>)] : []),
           )}
@@ -682,16 +696,16 @@ export const register: Register = on => {
         )}
         {section(
           'Session',
-          row('Version', <Text bold>{snap.version ?? '–'}</Text>),
-          row('Model', <Text>{snap.model ?? '–'}</Text>),
-          row('Effort', <Text bold>{thinking}</Text>),
+          row('Version', named(snap.version, true)),
+          row('Model', named(snap.model)),
+          row('Effort', named(thinking, true, undefined, effortColour(thinking, tone))),
           row('Running', <Text>{snap.startedAt ? duration(snap.updatedAt - snap.startedAt) : '–'}</Text>),
           row('Cost', <Text>{snap.costUsd === undefined ? '–' : `$${snap.costUsd.toFixed(2)}`}</Text>),
         )}
         {section(
           'Account',
           row('Plan', <Text>{snap.plan ?? '–'}</Text>),
-          row('Email', <Text wrap="truncate">{snap.email ?? '–'}</Text>),
+          row('Email', named(snap.email, false, 'truncate')),
         )}
         {section(
           'Context',

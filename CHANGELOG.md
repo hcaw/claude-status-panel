@@ -4,6 +4,14 @@ All notable changes to status-panel. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+The version, model, effort and email are coloured by their value, so a change stands out.
+
+### Added
+
+- The version, model and email each take one of 50 colours picked from their value: the same value is always the same colour, wherever it shows.
+- Effort runs from light yellow for `low` to bright red for `max`.
+- These colours come in a brighter tone for dark themes and a deeper one for light themes.
+
 ## [0.9.0] - 2026-10-21
 
 The release date and summary on the Settings tab now come from this changelog, and installing no longer downloads TypeScript.
